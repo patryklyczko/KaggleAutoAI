@@ -4,6 +4,7 @@ from ..metrics_regression import Metrics
 from sklearn.linear_model import ElasticNet
 import numpy as np
 
+
 class ElasticNetM(Metrics):
     def __init__(self):
         self.model = None

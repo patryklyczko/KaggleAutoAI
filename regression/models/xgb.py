@@ -4,6 +4,8 @@ from ..metrics_regression import Metrics
 import xgboost as xgb
 import numpy as np
 import optuna
+optuna.logging.disable_default_handler()
+
 
 class XGB(Metrics):
     def __init__(self):

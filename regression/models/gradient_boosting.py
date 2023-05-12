@@ -4,6 +4,7 @@ from sklearn.model_selection import GridSearchCV, train_test_split,KFold
 from ..metrics_regression import Metrics
 import numpy as np
 import optuna
+optuna.logging.disable_default_handler()
 
 
 class GradientBoosting(Metrics):

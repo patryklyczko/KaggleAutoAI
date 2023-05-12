@@ -4,6 +4,7 @@ from ..metrics_regression import Metrics
 from catboost import CatBoostRegressor
 import numpy as np
 import optuna
+optuna.logging.disable_default_handler()
 
 
 class Cat(Metrics):

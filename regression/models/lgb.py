@@ -4,6 +4,8 @@ from ..metrics_regression import Metrics
 import lightgbm as lgb
 import numpy as np
 import optuna
+optuna.logging.disable_default_handler()
+
 
 class LGB(Metrics):
     def __init__(self):
