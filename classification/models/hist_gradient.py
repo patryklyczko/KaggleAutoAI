@@ -4,6 +4,7 @@ from ..metrics import Metrics
 from sklearn.metrics import accuracy_score, roc_auc_score
 import numpy as np
 import optuna
+optuna.logging.disable_default_handler()
 
 
 class HistGradient(Metrics):

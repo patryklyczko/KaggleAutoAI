@@ -4,6 +4,7 @@ from sklearn.metrics import log_loss, roc_auc_score
 import numpy as np
 import xgboost as xgb
 import optuna
+optuna.logging.disable_default_handler()
 
 
 class XGB(Metrics):

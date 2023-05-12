@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import optuna
 from sklearn.preprocessing import OneHotEncoder
+optuna.logging.disable_default_handler()
 
 
 class RandomForest(Metrics):
