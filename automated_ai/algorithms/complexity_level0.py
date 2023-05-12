@@ -17,7 +17,7 @@ def Complexity_Level0(model, X, y):
             model_data.fix_column_str(col)
         else:
             model_data.fix_columns([col], "mean")
-    print(f"Completed")
+    print(f"Completed", end=" ")
     
     ## Text column to dummies
     for col in X.columns:
@@ -34,7 +34,7 @@ def Complexity_Level0(model, X, y):
         features = feature_model.get_feature_importance()
         for i,col in enumerate(X.columns):
             importance_columns[col] += features[i]
-    print("-------Complete")
+    print("-------Complete", end=" ")
     
     ## Acceptting column that satify the requirenments 
     mean_importance = sum(importance_columns.values()) / len(importance_columns)
@@ -43,10 +43,10 @@ def Complexity_Level0(model, X, y):
     for k,v in importance_columns.items():
         if v > threshold_importance:
             columns.append(k)
-    print("-------Complete")
+    print("-------Complete", end=" ")
 
     X = X[columns]
-    model.create_optuna(X,y,n_trials=500)
-    print("-------Complete")
+    model.create_optuna(X,y,n_trials=300)
+    print("-------Complete", end=" ")
     return model.get(), columns
 

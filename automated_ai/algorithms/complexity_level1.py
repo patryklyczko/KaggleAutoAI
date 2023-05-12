@@ -25,7 +25,7 @@ def Complexity_Level1(model, X, y):
                 standard_columns.append(col)
             else:
                 min_max_columns.append(col)
-    print(f"Completed")
+    print(f"Completed", end=" ")
 
     for col in X.columns:
         if X[col].dtype == "object" and X[col].nunique() < 10:
@@ -39,12 +39,12 @@ def Complexity_Level1(model, X, y):
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     for i, (train_index, valid_index) in enumerate(kfold.split(X,y)):
         X_train, y_train = X.iloc[train_index], y.iloc[train_index]
-        model.create_optuna(X_train,y_train,n_trials=100)
+        model.create_optuna(X_train,y_train,n_trials=50)
         feature_model = model.get()
         features = feature_model.get_feature_importance()
         for i,col in enumerate(X.columns):
             importance_columns[col] += features[i]
-    print("-------Complete")
+    print("-------Complete", end=" ")
 
     ## Acceptting column that satify the requirenments 
     mean_importance = sum(importance_columns.values()) / len(importance_columns)
@@ -53,9 +53,9 @@ def Complexity_Level1(model, X, y):
     for k,v in importance_columns.items():
         if v > threshold_importance:
             columns.append(k)
-    print("-------Complete")
+    print("-------Complete", end=" ")
 
     X = X[columns]
-    model.create_optuna(X,y,n_trials=1000)
-    print("-------Complete")
+    model.create_optuna(X,y,n_trials=500)
+    print("-------Complete", end=" ")
     return model.get(), columns
