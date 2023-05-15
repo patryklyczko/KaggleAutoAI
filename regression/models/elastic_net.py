@@ -10,6 +10,9 @@ class ElasticNetM(Metrics):
         self.model = None
         self.parameters = None
 
+    def put(self, model):
+        self.model = model
+
     def create(self, X, y, params=None):
         if params == None:
             gbm = ElasticNet()
