@@ -4,7 +4,7 @@ from scipy.stats import shapiro
 
 
 def Complexity_Level1(model, X, y):
-    print(f"Phase I \t\t Phase II \t\t Phase III \t\t Phase IV\n")
+    print(f"Phase I \t Phase II \t Phase III \t Phase IV\n")
     importance_columns = {}
     for col in X.columns:
         importance_columns[col] = 0
@@ -29,7 +29,7 @@ def Complexity_Level1(model, X, y):
 
     for col in X.columns:
         if X[col].dtype == "object" and X[col].nunique() < 10:
-            model_data.dummies(col)
+            model_data.dummies([col])
     model_data.min_max_scaler(min_max_columns)
     model_data.standard_scaler(standard_columns)
     

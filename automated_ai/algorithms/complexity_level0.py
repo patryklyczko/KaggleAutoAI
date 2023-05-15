@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split, KFold
 
 
 def Complexity_Level0(model, X, y):
-    print(f"Phase I \t\t Phase II \t\t Phase III \t\t Phase IV\n")
+    print(f"Phase I \t Phase II \t Phase III \t Phase IV\n")
     importance_columns = {}
     for col in X.columns:
         importance_columns[col] = 0
