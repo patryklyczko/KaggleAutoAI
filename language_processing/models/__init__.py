@@ -1,2 +1,2 @@
 from .baseline import Baseline
-from .nlp_model import NLPModel
+from .transformer_model import TransformerModel
