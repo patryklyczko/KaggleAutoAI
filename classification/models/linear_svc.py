@@ -2,6 +2,7 @@ from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.metrics import roc_auc_score
 from ..metrics import Metrics
 from sklearn.svm import LinearSVC
+from joblib import dump, load
 import numpy as np
 
 class SVC(Metrics):
@@ -67,3 +68,9 @@ class SVC(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="lsvc.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)

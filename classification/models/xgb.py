@@ -1,5 +1,6 @@
 from sklearn.model_selection import train_test_split,GridSearchCV,KFold
 from ..metrics import Metrics
+import optuna.visualization as vis
 from sklearn.metrics import log_loss, roc_auc_score
 import numpy as np
 import xgboost as xgb
@@ -53,9 +54,9 @@ class XGB(Metrics):
         self.model = model
         self.parameters = grid_search.best_params_
 
-    def create_optuna(self,X,y,params=None,n_trials=3):
-        params_columns = ['n_estimators','learning_rate','max_depth',
-                          'min_child_weight', 'subsample','colsample_bytree',
+    def create_optuna(self,X,y,params=None,n_trials=3, show_plot=False, show_features=False):
+        params_columns = ['n_estimators','learning_rate','max_depth', 'random_state',
+                          'min_child_weight', 'subsample','colsample_bytree', 'tree_method',
                           'gamma','scale_pos_weight','objective','eval_metric']
         params_basic = {
             'n_estimators': [100, 500],  
@@ -66,8 +67,10 @@ class XGB(Metrics):
             'colsample_bytree': [0.6, 1.0],  
             'gamma': [0, 0.3],  
             'scale_pos_weight': [1,10], 
-            'objective': 'binary:logistic', 
-            'eval_metric': 'logloss'}
+            'objective': ['binary:logistic'], 
+            'eval_metric': ['logloss'],
+            'tree_method': ['approx'],
+            "random_state": 42}
         if params == None:
             params = params_basic
         else:
@@ -82,23 +85,31 @@ class XGB(Metrics):
                 'learning_rate': trial.suggest_float('learning_rate', params['learning_rate'][0], params['learning_rate'][1]),
                 'max_depth': trial.suggest_int('max_depth', params['max_depth'][0], params['max_depth'][1]),
                 'min_child_weight': trial.suggest_int('min_child_weight', params['min_child_weight'][0], params['min_child_weight'][1]),
-                'subsample': params['subsample'],
+                'subsample': trial.suggest_float("subsample", params['subsample'], params['subsample']),
                 'colsample_bytree': trial.suggest_float('colsample_bytree', params['colsample_bytree'][0], params['colsample_bytree'][1]),
                 'gamma': trial.suggest_float('gamma', params['gamma'][0], params['gamma'][1]),
                 'scale_pos_weight': trial.suggest_float('scale_pos_weight', params['scale_pos_weight'][0], params['scale_pos_weight'][1]),
-                'objective': params['objective'],
-                'random_state': 42,
-                'eval_metric': params['eval_metric']
+                'objective': trial.suggest_categorical("objective", params['objective']),
+                'tree_method': trial.suggest_categorical("tree_method", params['tree_method']),
+                'random_state': trial.suggest_int("random_state", params["random_state"], params["random_state"]),
+                'eval_metric': trial.suggest_categorical("eval_metric", params['eval_metric'])
             }
             mxgb = xgb.XGBClassifier(**param)
             mxgb.fit(X_train, y_train)
             preds = mxgb.predict(X_test)
             logloss = log_loss(y_test, preds)
             return logloss
-        study = optuna.create_study(direction='minimize')
+        study = optuna.create_study(direction='minimize', pruner=optuna.pruners.MedianPruner())
         study.optimize(objective,n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         best_params = study.best_params
-        xgb_best = xgb.XGBClassifier(**best_params, random_state=42)
+        xgb_best = xgb.XGBClassifier(**best_params)
         xgb_best.fit(X, y)
         self.model = xgb_best
         self.parameters = best_params
@@ -110,23 +121,25 @@ class XGB(Metrics):
     def predict(self, X):
         return self.xgb.predict(X)
     
-    def evaluate_kfold(self, X, y, df_test, n_splits=5, params=None):
+    def evaluate_kfold(self, X, y, df_test, n_splits=5, params=None, classes=1):
         if params == None:
             params = self.parameters
         kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-        predictions = np.zeros(df_test.shape[0])
+        predictions = np.zeros(shape=(df_test.shape[0],classes))
         roc = []
         n=0
 
         for i, (train_index, valid_index) in enumerate(kfold.split(X,y)):
             X_train, X_test = X.iloc[train_index], X.iloc[valid_index]
             y_train, y_test = y.iloc[train_index], y.iloc[valid_index]
-
             self.create(X_train,y_train,params=params)
-            predictions += self.predict(df_test)/n_splits
-            val_pred = self.predict(X_test)
-            roc.append(roc_auc_score(y_test,val_pred))
+            predictions += np.expand_dims(self.predict(df_test)/n_splits, axis=-1)
 
+            val_pred = self.predict(X_test)
+            if classes > 1:
+              roc.append(roc_auc_score(y_test,val_pred,multi_class='ovr'))
+            else:
+              roc.append(roc_auc_score(y_test,val_pred))
             print(f"{i} Fold scored: {roc[i]}")
 
         print(f"Mean roc score {np.mean(roc)}")
@@ -137,4 +150,10 @@ class XGB(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path='xgb.bin'):
+        self.model.save_model(model_path)
+
+    def load(self, model_path):
+        self.model.load_model(model_path)
     

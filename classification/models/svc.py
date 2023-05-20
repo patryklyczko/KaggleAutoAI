@@ -2,6 +2,7 @@ from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.metrics import roc_auc_score
 from ..metrics import Metrics
 from sklearn.svm import SVC
+from joblib import dump, load
 import numpy as np
 
 
@@ -11,7 +12,18 @@ class SVCModel(Metrics):
         self.model = None
         self.parameters = None
 
-    def create_svc(self,X,y,params=None, cv=3, cache_size=100):
+    def create(self, X, y, params=None):
+        if params == None:
+            cat = SVC()
+            cat.fit(X,y)
+            self.model = cat
+        else:
+            cat = SVC(**params)
+            cat.fit(X,y)
+            self.model = cat
+            self.parameters = params
+
+    def create_grid(self,X,y,params=None, cv=3, cache_size=100):
         params_columns = ["C", "kernel", "gamma", "cache_size"]
         params_basic = {'C': [0.1,1,10],
                 'kernel': ['linear', 'rbf', 'poly', 'sigmoid'],
@@ -65,3 +77,9 @@ class SVCModel(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="svc.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)

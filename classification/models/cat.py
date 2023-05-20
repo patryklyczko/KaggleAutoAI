@@ -2,6 +2,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.preprocessing import OneHotEncoder
 from catboost import CatBoostClassifier
 from ..metrics import Metrics
+import optuna.visualization as vis
 from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
 import pandas as pd
 import numpy as np
@@ -57,7 +58,7 @@ class Cat(Metrics):
         self.model = grid_search.best_estimator_
         self.parameters = best_params
 
-    def create_optuna(self,X,y,params=None,n_trials=5,ram_limit=5):
+    def create_optuna(self,X,y,params=None,n_trials=5,ram_limit=5, show_plot=False, show_features=False):
         ram_limit *= 1024*1024*1024
         params_columns = ["depth","l2_leaf_reg","random_strength",
                           "thread_count","bootstrap_type","scale_pos_weight",
@@ -68,7 +69,7 @@ class Cat(Metrics):
             'l2_leaf_reg': [0,10],
             'random_strength': [0.01,0.9],
             'thread_count': -1,
-            'bootstrap_type': 'Bayesian',
+            'bootstrap_type': ['Bayesian', 'Bernoulli', 'MVS'],
             'scale_pos_weight': [0, 5],
             'num_boost_round': 200,
             'used_ram_limit': ram_limit,
@@ -89,14 +90,14 @@ class Cat(Metrics):
                 "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", params["l2_leaf_reg"][0], params["l2_leaf_reg"][1]),
                 "random_strength": trial.suggest_float("random_strength", params["random_strength"][0], params["random_strength"][1]),
                 "scale_pos_weight": trial.suggest_float("scale_pos_weight", params["scale_pos_weight"][0], params["scale_pos_weight"][1]),
-                "bootstrap_type": params["bootstrap_type"],
-                "used_ram_limit": params["used_ram_limit"],
-                "verbose": params["verbose"],
-                "thread_count": params["thread_count"],
-                "random_state": params['random_state'],
-                'num_boost_round': params['num_boost_round']
+                "bootstrap_type": trial.suggest_categorical("bootstrap_type", params["bootstrap_type"]),
+                "used_ram_limit": trial.suggest_int("used_ram_limit", params["used_ram_limit"], params["used_ram_limit"]),
+                "verbose": trial.suggest_int("verbose", params["verbose"], params["verbose"]),
+                "thread_count": trial.suggest_int("thread_count", params["thread_count"], params["thread_count"]),
+                "random_state": trial.suggest_int("random_state", params['random_state'], params['random_state']),
+                'num_boost_round': trial.suggest_int("num_boost_round", params['num_boost_round'], params['num_boost_round'])
             }
-            cat = CatBoostClassifier(**param,loss_function='MultiClass')
+            cat = CatBoostClassifier(**param)
             cat.fit(X_train,y_train)
             preds = cat.predict(X_test)
             loss = log_loss(y_test, preds)
@@ -107,12 +108,13 @@ class Cat(Metrics):
                 "depth": trial.suggest_int("depth", params["depth"][0], params["depth"][1]),
                 "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", params["l2_leaf_reg"][0], params["l2_leaf_reg"][1]),
                 "random_strength": trial.suggest_float("random_strength", params["random_strength"][0], params["random_strength"][1]),
-                "bootstrap_type": params["bootstrap_type"],
-                "used_ram_limit": params["used_ram_limit"],
-                "verbose": params["verbose"],
-                "thread_count": params["thread_count"],
-                "random_state": params['random_state'],
-                'num_boost_round': params['num_boost_round']
+                "scale_pos_weight": trial.suggest_float("scale_pos_weight", params["scale_pos_weight"][0], params["scale_pos_weight"][1]),
+                "bootstrap_type": trial.suggest_categorical("bootstrap_type", params["bootstrap_type"]),
+                "used_ram_limit": trial.suggest_int("used_ram_limit", params["used_ram_limit"], params["used_ram_limit"]),
+                "verbose": trial.suggest_int("verbose", params["verbose"], params["verbose"]),
+                "thread_count": trial.suggest_int("thread_count", params["thread_count"], params["thread_count"]),
+                "random_state": trial.suggest_int("random_state", params['random_state'], params['random_state']),
+                'num_boost_round': trial.suggest_int("num_boost_round", params['num_boost_round'], params['num_boost_round'])
             }
           cat = CatBoostClassifier(**param,loss_function='MultiClass')
           cat.fit(X_train,y_train)
@@ -121,19 +123,23 @@ class Cat(Metrics):
           return loss
 
 
-        study = optuna.create_study(direction="minimize")
+        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner())
         if max(y) > 1:
           study.optimize(objective_multi, n_trials=n_trials)
           best_params = study.best_params
-          best_params["random_state"] = params["random_state"]
-          best_params["bootstrap_type"] = params["bootstrap_type"]
-          cat = CatBoostClassifier(**best_params)
+          cat = CatBoostClassifier(**best_params,loss_function='MultiClass')
         else:
           study.optimize(objective_binary, n_trials=n_trials)
           best_params = study.best_params
-          best_params["random_state"] = params["random_state"]
-          best_params["bootstrap_type"] = params["bootstrap_type"]
-          cat = CatBoostClassifier(**best_params,loss_function='MultiClass')
+          cat = CatBoostClassifier(**best_params)
+
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         cat.fit(X, y)
         self.model = cat
         self.parameters = best_params
@@ -158,8 +164,9 @@ class Cat(Metrics):
             X_train, X_test = X.iloc[train_index], X.iloc[valid_index]
             y_train, y_test = y.iloc[train_index], y.iloc[valid_index]
             self.create(X_train,y_train,params=params)
-            predictions += self.get().predict_proba(df_test)/n_splits
-            val_pred = self.get().predict_proba(X_test)
+            predictions += np.expand_dims(self.predict(df_test)/n_splits, axis=-1)
+
+            val_pred = self.predict(X_test)
             if classes > 1:
               roc.append(roc_auc_score(y_test,val_pred,multi_class='ovr'))
             else:
@@ -196,3 +203,9 @@ class Cat(Metrics):
       for i in y:
         values.append(target_number[i])
       return values
+    
+    def save(self, model_path="cat.cbm"):
+        self.model.save_model(model_path)
+
+    def load(self, model_path):
+        self.model.load_model(model_path)

@@ -1,7 +1,9 @@
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.ensemble import RandomForestClassifier
 from ..metrics import Metrics
+import optuna.visualization as vis
 from sklearn.metrics import accuracy_score, roc_auc_score
+from joblib import dump, load
 import pandas as pd
 import numpy as np
 import optuna
@@ -55,14 +57,14 @@ class RandomForest(Metrics):
         self.model = model
         self.parameters = grid_search.best_params_
 
-    def create_optuna(self, X, y,params=None, n_trials=5):
+    def create_optuna(self, X, y,params=None, n_trials=5, show_plot=False, show_features=False):
         params_columns = ["n_estimators","criterion","max_depth",
                           "min_samples_split","min_samples_leaf",
                           "min_weight_fraction_leaf","n_jobs",
                           "random_state"]
         params_basic = {
             'n_estimators': [40, 200],
-            'criterion': 'entropy',
+            'criterion': ['gini', 'entropy', 'log_loss'],
             'max_depth': [1, 7],
             'min_samples_split': [2, 20],
             'min_samples_leaf': [1, 10],
@@ -79,14 +81,14 @@ class RandomForest(Metrics):
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         def objective(trial):
             param = {
-                'criterion': params['criterion'],
+                'criterion': trial.suggest_categorical("criterion", params['criterion']),
                 'n_estimators': trial.suggest_int('n_estimators', params['n_estimators'][0], params['n_estimators'][1]),
                 'max_depth': trial.suggest_int('max_depth', params['max_depth'][0], params['max_depth'][1]),
                 'min_samples_split': trial.suggest_int('min_samples_split', params['min_samples_split'][0], params['min_samples_split'][1]),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', params['min_samples_leaf'][0], params['min_samples_leaf'][1]),
                 'min_weight_fraction_leaf': trial.suggest_float('min_weight_fraction_leaf', params['min_weight_fraction_leaf'][0], params['min_weight_fraction_leaf'][1]),
-                'n_jobs': -1,
-                'random_state': 42,
+                'n_jobs': trial.suggest_int("n_jobs", params["n_jobs"], params["n_jobs"]),
+                'random_state': trial.suggest_int("random_state", params["random_state"], params["random_state"]),
             }
             rf = RandomForestClassifier(**param)
             rf.fit(X_train,y_train)
@@ -95,11 +97,17 @@ class RandomForest(Metrics):
             return accuracy
 
 
-        study = optuna.create_study(direction='maximize')
+        study = optuna.create_study(direction='maximize', pruner=optuna.pruners.MedianPruner())
         study.optimize(objective, n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+            
         best_params = study.best_params
-        best_params['criterion'] = params['criterion']
-        rf_best = RandomForestClassifier(**best_params, random_state=42)
+        rf_best = RandomForestClassifier(**best_params)
         rf_best.fit(X_train, y_train)
         self.model = rf_best
         self.parameters = best_params
@@ -160,3 +168,9 @@ class RandomForest(Metrics):
       for i in y:
         values.append(target_number[i])
       return values
+    
+    def save(self, model_path="rand_forest.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)

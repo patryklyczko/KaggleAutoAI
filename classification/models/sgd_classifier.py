@@ -1,6 +1,7 @@
 from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.metrics import roc_auc_score
 from ..metrics import Metrics
+from joblib import dump, load
 from sklearn.linear_model import SGDClassifier
 import numpy as np
 
@@ -67,3 +68,9 @@ class SGD(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="sgd.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)

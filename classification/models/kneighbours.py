@@ -2,6 +2,7 @@ from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.metrics import roc_auc_score
 from ..metrics import Metrics
 from sklearn.neighbors import KNeighborsClassifier
+from joblib import dump, load
 import numpy as np
 
 
@@ -64,3 +65,9 @@ class Kneighbours(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="kneigh.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)
