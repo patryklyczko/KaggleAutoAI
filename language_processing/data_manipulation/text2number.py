@@ -3,20 +3,21 @@ import numpy as np
 import tensorflow as tf
 
 class Text2Number():
-    def __init__(self):
+    def __init__(self, batch_size=32):
         self.token = None
+        self.batch_size = batch_size
 
     def tokenize_bert(self, data, seq_len=128, model="bert-base-cased"):
         '''
             Computationally expensive due to their large size, and the tokenization process can be slower
         '''
         tokenizer = BertTokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
     def tokenize_gpt2(self, data, seq_len=128, model="gpt2-medium"):
@@ -24,12 +25,12 @@ class Text2Number():
             Unidirectional
         '''
         tokenizer = GPT2Tokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
     def tokenize_robert(self, data, seq_len=128, model="roberta-base"):
@@ -37,12 +38,12 @@ class Text2Number():
             Requiring more computational resources for training and inference.
         '''
         tokenizer = RobertaTokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
     def tokenize_distilBERT(self, data, seq_len=128, model="distilbert-base-uncased"):
@@ -50,12 +51,12 @@ class Text2Number():
             Scenarios where memory and computational resources are limited
         '''
         tokenizer = DistilBertTokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
     def tokenize_Albert(self, data, seq_len=128, model="albert-base-v2"):
@@ -63,12 +64,12 @@ class Text2Number():
             Fewer parameters, making them more memory-efficient and faster during training and inference
         '''
         tokenizer = AlbertTokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
     def tokenize_Electra(self, data, seq_len=128, model="google/electra-base-discriminator"):
@@ -76,28 +77,45 @@ class Text2Number():
             Rely on a discriminator-generator setup, which means they may not capture certain aspects of language semantics
         '''
         tokenizer = ElectraTokenizer.from_pretrained(model)
-        token = tokenizer(data.tolist(),
+        token = tokenizer.encode_plus(data.tolist(),
                           max_length=seq_len,
                           truncation=True,
                           padding='max_length',
                           add_special_tokens=True,
-                          return_tensors="tf")
+                          return_attention_mask=True,)
         self.token = token
 
-    def create_dataset(self, labels, train_size=0.8, seq_len=128, batch_size=32):
+    def data_tokenized(self, data, labels, seq_len=128):
         '''
             Creates the train and validation datasets
         '''
+        train_ds_ids = []
+        train_ds_mask = []
+        train_label = []
         labels = np.array(labels.tolist()).reshape(-1,1)
-        size = int(labels.shape[0] / batch_size * train_size)
 
-        dataset = tf.data.Dataset.from_tensor_slices((self.token['input_ids'], self.token['attention_mask'], labels))
-        dataset = dataset.map(self.map_func)
-        dataset = dataset.shuffle(10000).batch(batch_size,drop_remainder=True)
+        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        for i, val in enumerate(data.tolist()):
+            val = tokenizer.encode_plus(val,
+                          max_length=seq_len,
+                          truncation=True,
+                          padding='max_length',
+                          add_special_tokens=True,
+                          return_attention_mask=True,)
 
-        train_ds = dataset.take(size)
-        val_ds = dataset.skip(size)
-        return train_ds, val_ds
+            train_ds_ids.append(val['input_ids'])
+            train_ds_mask.append(val['attention_mask'])
+            train_label.append(labels[i])
+
+        train_ds_ids = tf.convert_to_tensor(train_ds_ids)
+        train_ds_mask = tf.convert_to_tensor(train_ds_mask)
+        train_label = tf.convert_to_tensor(train_label)
+
+        return train_ds_ids,train_ds_mask, train_label
+    
+    def map_func_test(self, input_ids, masks):
+        return {'input_ids':input_ids,
+                'attention_mask':masks}
     
     def map_func(self, input_ids, masks, labels):
         return {'input_ids':input_ids,
