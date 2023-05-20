@@ -1,6 +1,7 @@
 from sklearn.model_selection import GridSearchCV, train_test_split,KFold
 from sklearn.metrics import mean_squared_error,r2_score
 from ..metrics_regression import Metrics
+import optuna.visualization as vis
 import xgboost as xgb
 import numpy as np
 import optuna
@@ -65,7 +66,7 @@ class XGB(Metrics):
         self.model = best_model
         self.parameters = grid_search.best_params_
 
-    def create_optuna(self, X, y, params=None, n_trials=5,available_memory_gb=3):
+    def create_optuna(self, X, y, params=None, n_trials=5,available_memory_gb=3, show_plot=False, show_features=False):
         rows = len(X)
         memory_row = X.memory_usage(deep=True).sum() / rows
         max_bin = int(np.floor(available_memory_gb * 1024**3 / (rows * memory_row)))
@@ -74,14 +75,14 @@ class XGB(Metrics):
         dtrain = xgb.DMatrix(X_train, label=y_train)
         dtest = xgb.DMatrix(X_test, label=y_test)
 
-        params_columns = ['eval_metric', 'boosting_type', 'objective', 'max_bin',
+        params_columns = ['eval_metric', 'boosting_type', 'objective', 'max_bin', 'tree_method',
                           'n_estimators', 'max_depth', 'learning_rate', 'subsample',
                           'colsample_bytree', 'gamma', 'min_child_weight', 'pos_scale_weight',
                           'max_delta_step', 'seed', 'num_boost_round', 'verbosity']
         params_basic = {
-            'eval_metric': 'rmse',
-            'boosting_type': 'gblinear',
-            'objective': 'reg:squarederror',
+            'eval_metric': ['rmse'],
+            'boosting_type': ['gblinear'],
+            'objective': ['reg:squarederror'],
             'learning_rate': [1e-4, 1e-1],
             'gamma': [0, 10],
             'min_child_weight': [3, 20],
@@ -93,8 +94,9 @@ class XGB(Metrics):
             'min_child_samples': [30,70],
             'subsample': [0.3, 0.9],
             'colsample_bytree': [0.5, 1.0],
+            'tree_method': ['approx'],
             'seed': 42,
-            'max_bin': 255,
+            'max_bin': max_bin,
             'num_boost_round': 300, 
             'verbosity': 0
         }
@@ -107,10 +109,10 @@ class XGB(Metrics):
         
         def objective(trial):
             param = {
-                'eval_metric': params['eval_metric'],
-                'boosting_type': params['boosting_type'],
-                'objective': params['objective'],
-                'max_bin': params['max_bin'],
+                'eval_metric': trial.suggest_categorical("eval_metric", params['eval_metric']),
+                'boosting_type': trial.suggest_categorical("boosting_type", params['boosting_type']),
+                'objective': trial.suggest_categorical("objective", params['objective']),
+                'max_bin': trial.suggest_int("max_bin", params['max_bin'], params['max_bin']),
                 'n_estimators': trial.suggest_int('n_estimators', params["n_estimators"][0], params["n_estimators"][1]),
                 'max_depth': trial.suggest_int('max_depth', params["max_depth"][0], params["max_depth"][1]),
                 'learning_rate': trial.suggest_float('learning_rate', params['learning_rate'][0], params['learning_rate'][1]),
@@ -120,21 +122,26 @@ class XGB(Metrics):
                 'min_child_weight': trial.suggest_int('min_child_weight', params['min_child_weight'][0], params['min_child_weight'][1]),
                 'pos_scale_weight': trial.suggest_float('pos_scale_weight', params['pos_scale_weight'][0], params['pos_scale_weight'][1]),
                 'max_delta_step': trial.suggest_int('max_delta_step', params['max_delta_step'][0], params['max_delta_step'][1]),
-                'seed': params['seed'],
-                'num_boost_round': params["num_boost_round"],
-                'verbosity': params['verbosity']
+                'seed': trial.suggest_int("seed", params['seed'], params['seed']),
+                'tree_method': trial.suggest_categorical("tree_method", params['tree_method']),
+                'num_boost_round': trial.suggest_int("num_boost_round", params["num_boost_round"], params["num_boost_round"]),
+                'verbosity': trial.suggest_int("verbosity", params['verbosity'], params['verbosity'])
             }
             xgb_model= xgb.train(param, dtrain)
             y_pred = xgb_model.predict(dtest)
             rmse = np.sqrt(mean_squared_error(y_test, y_pred))
             return rmse
     
-        study = optuna.create_study(direction='minimize')
+        study = optuna.create_study(direction='minimize',pruner=optuna.pruners.MedianPruner())
         study.optimize(objective, n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         best_params = study.best_trial.params
-        for parameter in params:
-                if parameter not in best_params.keys():
-                    best_params[parameter] = params[parameter]
         model = xgb.XGBRegressor(**best_params)
         self.model = model.fit(X, y)
         self.parameters = best_params
@@ -172,3 +179,9 @@ class XGB(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path='xgb.bin'):
+        self.model.save_model(model_path)
+
+    def load(self, model_path):
+        self.model.load_model(model_path)

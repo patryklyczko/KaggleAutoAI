@@ -1,7 +1,9 @@
 from sklearn.metrics import mean_squared_error,r2_score
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import GridSearchCV, train_test_split,KFold
+import optuna.visualization as vis
 from ..metrics_regression import Metrics
+from joblib import dump, load
 import numpy as np
 import optuna
 optuna.logging.disable_default_handler()
@@ -57,7 +59,7 @@ class GradientBoosting(Metrics):
         self.model = best_model
         self.parameters = grid_search.best_params_
 
-    def create_optuna(self, X, y, params=None, n_trials=5):
+    def create_optuna(self, X, y, params=None, n_trials=5, show_plot=False, show_features=False):
         params_columns = ['learning_rate', 'n_estimators', 'max_depth',
                         'min_samples_split', 'min_samples_leaf', 'max_features',
                         'subsample', 'loss', 'alpha', 'random_state', 'validation_fraction']
@@ -67,9 +69,9 @@ class GradientBoosting(Metrics):
             'max_depth': [1,10],
             'min_samples_split': [10,50],
             'min_samples_leaf': [10,100],
-            'max_features': 'sqrt',
+            'max_features': ['sqrt'],
             'subsample': 0.8,
-            'loss': 'huber',
+            'loss': ['ls', 'lad', 'huber', 'quantile'],
             'alpha': [0.1, 0.9],
             'random_state': 42,
             'validation_fraction': 0.2
@@ -89,12 +91,12 @@ class GradientBoosting(Metrics):
                 'max_depth': trial.suggest_int('max_depth', params['max_depth'][0], params['max_depth'][1]),
                 'min_samples_split': trial.suggest_int('min_samples_split', params['min_samples_split'][0], params['min_samples_split'][1]),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', params['min_samples_leaf'][0], params['min_samples_leaf'][1]),
-                'max_features': params['max_features'],
-                'subsample': params['subsample'],
-                'loss': params['loss'],
+                'max_features': trial.suggest_categorical("max_features", params['max_features']),
+                'subsample': trial.suggest_float("subsample", params['subsample'], params['subsample']),
+                'loss': trial.suggest_categorical("loss", params['loss']),
                 'alpha': trial.suggest_float('alpha', params['alpha'][0], params['alpha'][1]),
-                'random_state': params['random_state'],
-                'validation_fraction': params['validation_fraction']
+                'random_state': trial.suggest_int("random_state", params['random_state'], params['random_state']),
+                'validation_fraction': trial.suggest_float("validation_fraction", params['validation_fraction'], params['validation_fraction'])
             }
             gbm = GradientBoostingRegressor(**param)
             gbm.fit(X_train, y_train)
@@ -102,12 +104,16 @@ class GradientBoosting(Metrics):
             mse = mean_squared_error(y_test, y_pred)
             return mse
         
-        study = optuna.create_study(direction='minimize')
+        study = optuna.create_study(direction='minimize', pruner=optuna.pruners.MedianPruner())
         study.optimize(objective, n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         best_params = study.best_params
-        for parameter in params:
-                if parameter not in best_params.keys():
-                    best_params[parameter] = params[parameter]
         gbm_best = GradientBoostingRegressor(**best_params)
         gbm_best.fit(X, y)
         self.model= gbm_best
@@ -147,6 +153,10 @@ class GradientBoosting(Metrics):
     def get_parameters(self):
         return self.parameters
 
+    def save(self, model_path="gradient_boosting.joblib"):
+        dump(self.model, model_path)
     
+    def load(self, model_path):
+        self.model = load(model_path)
 
 

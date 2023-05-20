@@ -1,6 +1,7 @@
 from sklearn.model_selection import GridSearchCV, train_test_split,KFold
 from sklearn.metrics import mean_squared_error,r2_score
 from ..metrics_regression import Metrics
+import optuna.visualization as vis
 from catboost import CatBoostRegressor
 import numpy as np
 import optuna
@@ -58,7 +59,7 @@ class Cat(Metrics):
         self.model = best_model
         self.parameters = best_params
 
-    def create_optuna(self, X, y, params=None, n_trials=5):
+    def create_optuna(self, X, y, params=None, n_trials=5, show_plot=False, show_features=False):
         params_columns = ['depth', 'l2_leaf_reg','border_count','feature_border_type'
                           'bagging_temperature','random_strength','fold_permutation_type'
                           'grow_policy','leaf_estimation_method','random_seed','verbose']
@@ -68,9 +69,9 @@ class Cat(Metrics):
             'border_count': [4,128],
             'bagging_temperature': [0, 0.7],
             'random_strength': [0, 0.7],
-            'grow_policy': 'Depthwise',
-            'leaf_estimation_method': 'Gradient',
-            "feature_border_type": "MinEntropy",
+            'grow_policy': ['SymmetricTree', 'Depthwise', 'Lossguide'],
+            'leaf_estimation_method': ['Newton', 'Gradient', 'Exact'],
+            "feature_border_type": ["Uniform","MinEntropy"],
             "fold_permutation_block": 3,
             'random_seed': 42,
             'verbose': 0
@@ -90,12 +91,12 @@ class Cat(Metrics):
                   'border_count': trial.suggest_int('border_count', params['border_count'][0], params['border_count'][1]),
                   'bagging_temperature': trial.suggest_float('bagging_temperature', params['bagging_temperature'][0],params['bagging_temperature'][1]),
                   'random_strength': trial.suggest_float('random_strength', params['random_strength'][0], params['random_strength'][1]),
-                  'grow_policy': params['grow_policy'],
-                  'leaf_estimation_method': params['leaf_estimation_method'],
-                  'feature_border_type': params['feature_border_type'],
-                  'fold_permutation_block': params['fold_permutation_block'],
-                  'random_seed': params['random_seed'],
-                  'verbose': params['verbose']
+                  'grow_policy': trial.suggest_categorical("grow_policy", params['grow_policy']),
+                  'leaf_estimation_method': trial.suggest_categorical("leaf_estimation_method", params['leaf_estimation_method']),
+                  'feature_border_type': trial.suggest_categorical("feature_border_type", params['feature_border_type']),
+                  'fold_permutation_block': trial.suggest_int("fold_permutation_block", params['fold_permutation_block'], params['fold_permutation_block']),
+                  'random_seed': trial.suggest_int("random_state", params['random_seed'], params['random_seed']),
+                  'verbose': trial.suggest_int("verbose", params['verbose'], params['verbose'])
             }
             gbm = CatBoostRegressor(**param)
             gbm.fit(X_train, y_train)
@@ -103,12 +104,16 @@ class Cat(Metrics):
             mse = mean_squared_error(y_test, y_pred)
             return mse
         
-        study = optuna.create_study(direction='minimize')
+        study = optuna.create_study(direction='minimize',pruner=optuna.pruners.MedianPruner())
         study.optimize(objective, n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         best_params = study.best_trial.params
-        for parameter in params:
-                if parameter not in best_params.keys():
-                    best_params[parameter] = params[parameter]
         model = CatBoostRegressor(**best_params)
         self.model = model.fit(X, y)
         self.parameters = best_params
@@ -146,3 +151,9 @@ class Cat(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="cat.cbm"):
+        self.model.save_model(model_path)
+
+    def load(self, model_path):
+        self.model.load_model(model_path)

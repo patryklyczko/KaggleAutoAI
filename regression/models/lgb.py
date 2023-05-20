@@ -1,6 +1,7 @@
 from sklearn.model_selection import GridSearchCV, train_test_split,KFold
 from sklearn.metrics import mean_squared_error,r2_score
 from ..metrics_regression import Metrics
+import optuna.visualization as vis
 import lightgbm as lgb
 import numpy as np
 import optuna
@@ -56,12 +57,12 @@ class LGB(Metrics):
         self.model = best_model
         self.parameters = grid_search.best_params_
 
-    def create_optuna(self, X, y, params=None, n_trials=5):
+    def create_optuna(self, X, y, params=None, n_trials=5, show_plot=False, show_features=False):
         params_columns = ['boosting_type', 'objective', 'num_leaves',
                           'n_estimators', 'max_depth', 'min_child_samples',
                           'subsample', 'colsample_bytree', 'seed', 'max_bin']
         params_basic = {
-            'boosting_type': 'gbdt',
+            'boosting_type': ['gbdt'],
             'objective': 'regression',
             'num_leaves': [10,100],
             'n_estimators': [10, 200],
@@ -81,28 +82,32 @@ class LGB(Metrics):
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         def objective(trial):
             param = {
-                'boosting_type': params['boosting_type'],
-                'objective': params['objective'],
+                'boosting_type': trial.suggest_categorical("boosting_type", params['boosting_type']),
+                'objective': trial.suggest_categorical("objective", params['objective']),
                 'num_leaves': trial.suggest_int('num_leaves', params['num_leaves'][0], params['num_leaves'][1]),
                 'n_estimators': trial.suggest_int('n_estimators', params['n_estimators'][0], params['n_estimators'][1]),
                 'max_depth': trial.suggest_int("max_depth", params['max_depth'][0], params['max_depth'][1]),
                 'min_child_samples': trial.suggest_int("min_child_samples", params['min_child_samples'][0], params['min_child_samples'][1]),
-                'subsample': params['subsample'],
-                'colsample_bytree': params['colsample_bytree'],
-                'seed': params['seed'],
-                'max_bin': params['max_bin']
+                'subsample': trial.suggest_float("subsample", params['subsample']),
+                'colsample_bytree': trial.suggest_float("colsamlpe_bytree", params['colsample_bytree']),
+                'seed': trial.suggest_int("seed", params['seed'], params['seed']),
+                'max_bin': trial.suggest_int("max_bin", params['max_bin'], params['max_bin'])
             }
             gbm = lgb.LGBMRegressor(**param)
             gbm.fit(X_train, y_train)
             y_pred = gbm.predict(X_test)
             mse = mean_squared_error(y_test, y_pred)
             return mse
-        study = optuna.create_study(direction='minimize')
+        study = optuna.create_study(direction='minimize', pruner=optuna.pruners.MedianPruner())
         study.optimize(objective, n_trials=n_trials)
+        if show_plot:
+            optimization_history_plot = vis.plot_optimization_history(study)
+            optimization_history_plot.show()
+        if show_features:
+            param_importance_plot = vis.plot_param_importances(study)
+            param_importance_plot.show()
+
         best_params = study.best_params
-        for parameter in params:
-                if parameter not in best_params.keys():
-                    best_params[parameter] = params[parameter]
         gbm_best = lgb.LGBMRegressor(**best_params)
         gbm_best.fit(X, y)
         self.model= gbm_best
@@ -141,3 +146,9 @@ class LGB(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path='lgb.txt'):
+        self.model.save_model(model_path)
+
+    def load(self, model_path):
+        self.model =lgb.Booster(model_file=model_path)

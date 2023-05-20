@@ -3,7 +3,7 @@ from sklearn.metrics import r2_score
 from ..metrics_regression import Metrics
 from sklearn.linear_model import ElasticNet
 import numpy as np
-
+from joblib import dump, load
 
 class ElasticNetM(Metrics):
     def __init__(self):
@@ -81,3 +81,9 @@ class ElasticNetM(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="elastic_net.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)

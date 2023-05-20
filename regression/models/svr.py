@@ -1,6 +1,7 @@
 from sklearn.model_selection import GridSearchCV, train_test_split,KFold
 from sklearn.metrics import mean_squared_error,r2_score
 from ..metrics_regression import Metrics
+from joblib import dump, load
 from sklearn.svm import SVR
 import numpy as np
 
@@ -81,3 +82,9 @@ class SVRM(Metrics):
     
     def get_parameters(self):
         return self.parameters
+    
+    def save(self, model_path="svr.joblib"):
+        dump(self.model, model_path)
+    
+    def load(self, model_path):
+        self.model = load(model_path)
