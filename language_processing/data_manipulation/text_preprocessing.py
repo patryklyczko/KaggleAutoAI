@@ -10,8 +10,6 @@ import emoji
 import string
 import re
 
-nltk.download('stopwords')
-
 
 class TextPreprocessing():
     def __init__(self, text:pd.DataFrame):
@@ -24,6 +22,11 @@ class TextPreprocessing():
         self.text = self.text.apply(lambda x: remove_punctuation(x))
 
     def stopwords(self, language='english'):
+        try:
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            nltk.download('stopwords')
+        
         stopword = set(stopwords.words(language))
         self.text = self.text.apply(lambda x: remove_stopwords(x, stopword))
 
